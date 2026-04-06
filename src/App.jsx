@@ -10,30 +10,30 @@ import AuditLog from './pages/AuditLog'
 import CustomFields from './pages/CustomFields'
 
 function PrivateRoute({ children }) {
-    const { user, loading } = useAuth()
-    if (loading) return <div className="loading">Chargement...</div>div>
-        return user ? children : <Navigate to="/login" />
+  const { user, loading } = useAuth()
+  if (loading) return <div className="loading">Chargement...</div>
+  return user ? children : <Navigate to="/login" />
 }
 
 function App() {
-    return (
-          <AuthProvider>
-                <BrowserRouter>
-                        <Routes>
-                                  <Route path="/login" element={<Login />} />
-                                  <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>PrivateRoute>}>
-                                              <Route index element={<Dashboard />} />
-                                              <Route path="pipeline" element={<Pipeline />} />
-                                              <Route path="marches" element={<Marches />} />
-                                              <Route path="marches/new" element={<MarcheForm />} />
-                                              <Route path="marches/:id/edit" element={<MarcheForm />} />
-                                              <Route path="audit" element={<AuditLog />} />
-                                              <Route path="custom-fields" element={<CustomFields />} />
-                                  </Route>Route>
-                        </Routes>Routes>
-                </BrowserRouter>BrowserRouter>
-          </AuthProvider>AuthProvider>
-        )
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+            <Route index element={<Dashboard />} />
+            <Route path="pipeline" element={<Pipeline />} />
+            <Route path="marches" element={<Marches />} />
+            <Route path="marches/new" element={<MarcheForm />} />
+            <Route path="marches/:id/edit" element={<MarcheForm />} />
+            <Route path="audit-log" element={<AuditLog />} />
+            <Route path="custom-fields" element={<CustomFields />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
 }
 
-export default App</div>
+export default App
