@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../supabaseClient'
 import { useAuth } from '../contexts/AuthContext'
 
 const TYPES = [
@@ -8,190 +8,208 @@ const TYPES = [
   { value: 'date', label: 'Date' },
   { value: 'boolean', label: 'Oui/Non' },
   { value: 'select', label: 'Liste de choix' },
-  ]
+]
 
 const EMPTY_FIELD = { label: '', type_champ: 'text', options: '', requis: false, actif: true, ordre: 0 }
 
 export default function CustomFields() {
-    const { profile } = useAuth()
-    const [fields, setFields] = useState([])
-    const [form, setForm] = useState(EMPTY_FIELD)
-    const [editId, setEditId] = useState(null)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState('')
-    const [success, setSuccess] = useState('')
+  const { profile } = useAuth()
+  const [fields, setFields] = useState([])
+  const [form, setForm] = useState(EMPTY_FIELD)
+  const [editId, setEditId] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
 
-  const isAdmin = profile?.role === 'admin'
+  useEffect(() => {
+    if (profile?.role === 'admin') fetchFields()
+  }, [profile])
 
-  useEffect(() => { loadFields() }, [])
-
-  async function loadFields() {
-        const { data } = await supabase.from('custom_fields').select('*').order('ordre')
-        if (data) setFields(data)
+  async function fetchFields() {
+    const { data } = await supabase.from('custom_fields').select('*').order('ordre')
+    if (data) setFields(data)
   }
 
   function handleChange(e) {
-        const { name, value, type, checked } = e.target
-        setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+    const { name, value, type, checked } = e.target
+    setForm({ ...form, [name]: type === 'checkbox' ? checked : value })
   }
 
   async function handleSubmit(e) {
-        e.preventDefault()
-        if (!isAdmin) return
-        setLoading(true)
-        setError('')
-        setSuccess('')
-        const payload = { ...form, ordre: Number(form.ordre) || 0 }
-        if (editId) {
-                const { error: err } = await supabase.from('custom_fields').update(payload).eq('id', editId)
-                if (err) { setError(err.message); setLoading(false); return }
-                setSuccess('Champ mis à jour avec succès')
-        } else {
-                const { error: err } = await supabase.from('custom_fields').insert(payload)
-                if (err) { setError(err.message); setLoading(false); return }
-                setSuccess('Champ créé avec succès')
-        }
-        setForm(EMPTY_FIELD)
-        setEditId(null)
-        setLoading(false)
-        loadFields()
+    e.preventDefault()
+    setLoading(true)
+    setMsg('')
+    if (editId) {
+      await supabase.from('custom_fields').update(form).eq('id', editId)
+      setMsg('Champ mis a jour!')
+    } else {
+      await supabase.from('custom_fields').insert([form])
+      setMsg('Champ cree!')
+    }
+    setForm(EMPTY_FIELD)
+    setEditId(null)
+    setLoading(false)
+    fetchFields()
   }
 
   function handleEdit(field) {
-        setEditId(field.id)
-        setForm({ label: field.label, type_champ: field.type_champ, options: field.options || '', requis: field.requis, actif: field.actif, ordre: field.ordre })
-        setError('')
-        setSuccess('')
-  }
-
-  async function handleToggle(field) {
-        if (!isAdmin) return
-        await supabase.from('custom_fields').update({ actif: !field.actif }).eq('id', field.id)
-        loadFields()
+    setForm({
+      label: field.label,
+      type_champ: field.type_champ,
+      options: field.options || '',
+      requis: field.requis,
+      actif: field.actif,
+      ordre: field.ordre,
+    })
+    setEditId(field.id)
   }
 
   async function handleDelete(id) {
-        if (!isAdmin) return
-        if (!window.confirm('Supprimer ce champ personnalisé ?')) return
-        await supabase.from('custom_fields').delete().eq('id', id)
-        loadFields()
+    if (!window.confirm('Supprimer ce champ?')) return
+    await supabase.from('custom_fields').delete().eq('id', id)
+    fetchFields()
   }
 
-  function cancelEdit() {
-        setEditId(null)
-        setForm(EMPTY_FIELD)
-        setError('')
-        setSuccess('')
+  async function toggleActif(field) {
+    await supabase.from('custom_fields').update({ actif: !field.actif }).eq('id', field.id)
+    fetchFields()
   }
 
-  if (!isAdmin) {
-        return (
-                <div className="page">
-                        <div className="page-header"><h1>Accès refusé</h1>h1></div>div>
-                        <p>Cette page est réservée aux administrateurs.</p>p>
-                </div>div>
-              )
+  if (profile?.role !== 'admin') {
+    return <div className="page-container"><p>Acces refuse.</p></div>
   }
-  
-    return (
-          <div className="page">
-                <div className="page-header">
-                        <h1>Champs personnalisés</h1>h1>
-                        <p style={{color:'#aaa', marginTop:'4px'}}>Ajoutez vos propres paramètres aux marchés</p>p>
-                </div>div>
-          
-            {error && <div className="error-msg">{error}</div>div>}
-            {success && <div className="success-msg">{success}</div>div>}
-          
-                <div className="form-grid" style={{marginBottom:'2rem'}}>
-                        <div className="form-section">
-                                  <h3>{editId ? 'Modifier le champ' : 'Nouveau champ personnalisé'}</h3>h3>
-                                  <form onSubmit={handleSubmit}>
-                                              <div className="form-row">
-                                                            <div className="form-group">
-                                                                            <label>Libellé *</label>label>
-                                                                            <input name="label" value={form.label} onChange={handleChange} required placeholder="Ex: Numéro de commande" />
-                                                            </div>div>
-                                                            <div className="form-group">
-                                                                            <label>Type</label>label>
-                                                                            <select name="type_champ" value={form.type_champ} onChange={handleChange}>
-                                                                              {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>option>)}
-                                                                            </select>select>
-                                                            </div>div>
-                                              </div>div>
-                                    {form.type_champ === 'select' && (
-                          <div className="form-group">
-                                          <label>Options (séparées par virgule)</label>label>
-                                          <input name="options" value={form.options} onChange={handleChange} placeholder="Option1, Option2, Option3" />
-                          </div>div>
-                                              )}
-                                              <div className="form-row">
-                                                            <div className="form-group">
-                                                                            <label>Ordre d&apos;affichage</label>label>
-                                                                            <input type="number" name="ordre" value={form.ordre} onChange={handleChange} min="0" />
-                                                            </div>div>
-                                                            <div className="form-group" style={{display:'flex', alignItems:'center', gap:'1rem', paddingTop:'1.5rem'}}>
-                                                                            <label className="checkbox-label">
-                                                                                              <input type="checkbox" name="requis" checked={form.requis} onChange={handleChange} />
-                                                                                              Requis
-                                                                            </label>label>
-                                                                            <label className="checkbox-label">
-                                                                                              <input type="checkbox" name="actif" checked={form.actif} onChange={handleChange} />
-                                                                                              Actif
-                                                                            </label>label>
-                                                            </div>div>
-                                              </div>div>
-                                              <div className="form-actions" style={{justifyContent:'flex-start', gap:'1rem'}}>
-                                                            <button type="submit" disabled={loading} className="btn-primary">
-                                                              {loading ? 'Enregistrement...' : (editId ? 'Mettre à jour' : 'Ajouter le champ')}
-                                                            </button>button>
-                                                {editId && <button type="button" onClick={cancelEdit} className="btn-secondary">Annuler</button>button>}
-                                              </div>div>
-                                  </form>form>
-                        </div>div>
-                </div>div>
-          
-                <div className="form-section">
-                        <h3>Champs existants ({fields.length})</h3>h3>
-                  {fields.length === 0 ? (
-                      <p style={{color:'#aaa'}}>Aucun champ personnalisé pour l&apos;instant.</p>p>
-                    ) : (
-                      <table style={{width:'100%', borderCollapse:'collapse'}}>
-                                  <thead>
-                                                <tr style={{borderBottom:'1px solid #333'}}>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Libellé</th>th>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Type</th>th>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Options</th>th>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Ordre</th>th>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Requis</th>th>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Statut</th>th>
-                                                                <th style={{textAlign:'left', padding:'8px', color:'#7c6af7'}}>Actions</th>th>
-                                                </tr>tr>
-                                  </thead>thead>
-                                  <tbody>
-                                    {fields.map(f => (
-                                        <tr key={f.id} style={{borderBottom:'1px solid #222', opacity: f.actif ? 1 : 0.5}}>
-                                                          <td style={{padding:'8px'}}>{f.label}</td>td>
-                                                          <td style={{padding:'8px'}}>{TYPES.find(t => t.value === f.type_champ)?.label || f.type_champ}</td>td>
-                                                          <td style={{padding:'8px', color:'#aaa', fontSize:'0.85em'}}>{f.options || '-'}</td>td>
-                                                          <td style={{padding:'8px'}}>{f.ordre}</td>td>
-                                                          <td style={{padding:'8px'}}>{f.requis ? '✓' : '-'}</td>td>
-                                                          <td style={{padding:'8px'}}>
-                                                                              <span style={{color: f.actif ? '#22c55e' : '#ef4444'}}>{f.actif ? 'Actif' : 'Inactif'}</span>span>
-                                                          </td>td>
-                                                          <td style={{padding:'8px', display:'flex', gap:'0.5rem'}}>
-                                                                              <button onClick={() => handleEdit(f)} className="btn-secondary" style={{padding:'4px 10px', fontSize:'0.8em'}}>Éditer</button>button>
-                                                                              <button onClick={() => handleToggle(f)} className="btn-secondary" style={{padding:'4px 10px', fontSize:'0.8em'}}>
-                                                                                {f.actif ? 'Désactiver' : 'Activer'}
-                                                                              </button>button>
-                                                                              <button onClick={() => handleDelete(f.id)} style={{padding:'4px 10px', fontSize:'0.8em', background:'#ef4444', color:'white', border:'none', borderRadius:'6px', cursor:'pointer'}}>Supprimer</button>button>
-                                                          </td>td>
-                                        </tr>tr>
-                                      ))}
-                                  </tbody>tbody>
-                      </table>table>
-                        )}
-                </div>div>
-          </div>div>
-        )
-}</div>
+
+  return (
+    <div className="page-container">
+      <h1 className="page-title">Gestion des champs personnalises</h1>
+      {msg && <div className="success-msg">{msg}</div>}
+
+      <div className="form-card">
+        <h2>{editId ? 'Modifier le champ' : 'Ajouter un champ'}</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Nom du champ *</label>
+              <input
+                type="text"
+                name="label"
+                className="form-input"
+                value={form.label}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Type</label>
+              <select name="type_champ" className="form-input" value={form.type_champ} onChange={handleChange}>
+                {TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {form.type_champ === 'select' && (
+            <div className="form-group">
+              <label>Options (separees par virgule)</label>
+              <input
+                type="text"
+                name="options"
+                className="form-input"
+                placeholder="Option1,Option2,Option3"
+                value={form.options}
+                onChange={handleChange}
+              />
+            </div>
+          )}
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Ordre d affichage</label>
+              <input
+                type="number"
+                name="ordre"
+                className="form-input"
+                value={form.ordre}
+                onChange={handleChange}
+              />
+            </div>
+            <div className="form-group" style={{display:'flex', alignItems:'center', gap:'1rem', paddingTop:'1.5rem'}}>
+              <label style={{display:'flex', alignItems:'center', gap:'0.5rem', cursor:'pointer'}}>
+                <input type="checkbox" name="requis" checked={form.requis} onChange={handleChange} />
+                Obligatoire
+              </label>
+              <label style={{display:'flex', alignItems:'center', gap:'0.5rem', cursor:'pointer'}}>
+                <input type="checkbox" name="actif" checked={form.actif} onChange={handleChange} />
+                Actif
+              </label>
+            </div>
+          </div>
+
+          <div className="form-actions">
+            {editId && (
+              <button type="button" className="btn-secondary" onClick={() => { setForm(EMPTY_FIELD); setEditId(null) }}>
+                Annuler
+              </button>
+            )}
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? 'Enregistrement...' : (editId ? 'Modifier' : 'Ajouter')}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="form-card" style={{marginTop:'2rem'}}>
+        <h2>Champs existants ({fields.length})</h2>
+        {fields.length === 0 ? (
+          <p style={{color:'#888'}}>Aucun champ personnalise cree.</p>
+        ) : (
+          <table style={{width:'100%', borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{borderBottom:'2px solid #e5e7eb'}}>
+                <th style={{textAlign:'left', padding:'0.5rem'}}>Ordre</th>
+                <th style={{textAlign:'left', padding:'0.5rem'}}>Nom</th>
+                <th style={{textAlign:'left', padding:'0.5rem'}}>Type</th>
+                <th style={{textAlign:'left', padding:'0.5rem'}}>Requis</th>
+                <th style={{textAlign:'left', padding:'0.5rem'}}>Statut</th>
+                <th style={{textAlign:'left', padding:'0.5rem'}}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fields.map(field => (
+                <tr key={field.id} style={{borderBottom:'1px solid #e5e7eb'}}>
+                  <td style={{padding:'0.5rem'}}>{field.ordre}</td>
+                  <td style={{padding:'0.5rem'}}>{field.label}</td>
+                  <td style={{padding:'0.5rem'}}>{TYPES.find(t => t.value === field.type_champ)?.label || field.type_champ}</td>
+                  <td style={{padding:'0.5rem'}}>{field.requis ? 'Oui' : 'Non'}</td>
+                  <td style={{padding:'0.5rem'}}>
+                    <button
+                      onClick={() => toggleActif(field)}
+                      style={{
+                        padding:'0.25rem 0.75rem',
+                        borderRadius:'9999px',
+                        border:'none',
+                        cursor:'pointer',
+                        background: field.actif ? '#d1fae5' : '#fee2e2',
+                        color: field.actif ? '#065f46' : '#991b1b',
+                      }}
+                    >
+                      {field.actif ? 'Actif' : 'Inactif'}
+                    </button>
+                  </td>
+                  <td style={{padding:'0.5rem', display:'flex', gap:'0.5rem'}}>
+                    <button onClick={() => handleEdit(field)} className="btn-secondary" style={{padding:'0.25rem 0.75rem', fontSize:'0.875rem'}}>
+                      Modifier
+                    </button>
+                    <button onClick={() => handleDelete(field.id)} style={{padding:'0.25rem 0.75rem', fontSize:'0.875rem', background:'#fee2e2', color:'#991b1b', border:'none', borderRadius:'6px', cursor:'pointer'}}>
+                      Supprimer
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
